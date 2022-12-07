@@ -26,9 +26,10 @@ function logger (req) {
   console.log('REQ.PATH:', req.path) // '/new'
   console.log('REQ.PARAMS:', req.params) // '/???'
   console.log('REQ.QUERY:', req.query)
+  console.log('REQ.GET.AUTHORIZATION:', req.get('authorization'))
   console.log('REQ.HEADERS:', req.headers)
   console.log('REQ.HEADERS.AUTHORIZATION:', req.headers['authorization'])
-  console.log('AUTHORIZATION:', req.get('authorization'))
+  console.log('REQ.HEADERS.X-SHOPIFY:', req.headers['x-shopify-access-token'])
   console.log('CONTENT-TYPE:', req.get('content-type'))
   console.log('REQ.BODY', req.body)
 }
@@ -36,20 +37,44 @@ function logger (req) {
 // ATTN-PROXY
 // Reroute all requests sent to /attn-proxy to https://api.attentivemobile.com/v1
 // Preserve anything in the path after /attn-proxy
-app.use('/attn-proxy', (req, res, next) => {
+app.use(/.*proxy/, (req, res, next) => {
+  console.log('PROXY')
   logger(req)
 
-  const path = req.originalUrl.replace('/attn-proxy', '')
-  console.log('PATH:', path)
-  const url = `https://api.attentivemobile.com/v1${path}`
-  console.log('URL:', url)
-  const method = req.method
+  let path
+  let url
   const headers = {}
-  const auth = req.get('authorization')
-  if (auth) headers['authorization'] = auth
+  const method = req.method
+  let data
+
+  // Set URL and Auth
+  if (req.originalUrl.includes('/attn-proxy')) {
+    path = req.originalUrl.replace('/attn-proxy', '')
+    url = `https://api.attentivemobile.com/v1${path}`
+    headers['authorization'] = req.get('authorization')
+  } else if (req.originalUrl.includes('/shopify-proxy')) {
+    path = req.originalUrl.replace('/shopify-proxy', '')
+    url = `https://chafco.myshopify.com${path}`
+    headers['X-Shopify-Access-Token'] = req.headers['x-shopify-access-token']
+  }
+  console.log('PATH:', path)
+  console.log('URL:', url)
+
+  // Set Content Type and Body Data
   const contentType = req.get('content-type')
   if (contentType) headers['content-type'] = contentType
-  const data = req.body
+  if (method === 'POST' || method === 'PUT') {
+    console.log('METHOD POST || PUT')
+    if (contentType && contentType === 'application/json') {
+      console.log('APPLICATION/JSON')
+      data = req.body
+    }
+  } else {
+    console.log('APPLICATION/X-WWW-FORM-URLENCODED')
+    const qs = new URLSearchParams(req.params).toString()
+    console.log('QS:', qs)
+    data = qs
+  }
   console.log('DATA:', data)
 
   axios({
